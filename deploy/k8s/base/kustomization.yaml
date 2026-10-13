@@ -1,0 +1,12 @@
+# Base: everything jobbot needs, identical for every environment.
+# Environment differences (image tag, resources, extras) live in overlays/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: jobbot
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: jobbot
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - jobbot.yaml

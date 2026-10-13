@@ -1,0 +1,9 @@
+# Local environment: kind cluster on the developer machine.
+# The image is built locally and loaded into kind nodes (`make image`), no registry.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  - name: jobbot
+    newTag: local
