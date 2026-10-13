@@ -45,3 +45,24 @@ status:           ## show everything in the namespace
 
 psql:             ## open psql in the database
 	kubectl -n $(NAMESPACE) exec -it postgres-0 -- psql -U postgres
+
+# --- AWS infrastructure (Terraform) ---
+TF_PROD  := terraform -chdir=infra/terraform/prod
+# your current public IP: only it may reach SSH and the Kubernetes API
+MY_CIDR   = $$(curl -s https://checkip.amazonaws.com)/32
+
+.PHONY: infra-bootstrap infra-plan infra-apply infra-destroy
+
+infra-bootstrap:  ## one-time: create S3 bucket for Terraform state
+	terraform -chdir=infra/terraform/bootstrap init
+	terraform -chdir=infra/terraform/bootstrap apply
+
+infra-plan:       ## show what Terraform would change in AWS
+	$(TF_PROD) init -input=false
+	TF_VAR_admin_cidr=$(MY_CIDR) $(TF_PROD) plan
+
+infra-apply:      ## create/update AWS infrastructure (asks for confirmation)
+	TF_VAR_admin_cidr=$(MY_CIDR) $(TF_PROD) apply
+
+infra-destroy:    ## delete everything in prod (asks for confirmation)
+	TF_VAR_admin_cidr=$(MY_CIDR) $(TF_PROD) destroy

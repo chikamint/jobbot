@@ -67,9 +67,30 @@ make help       # all targets
 
 Operations: [docs/runbook.md](docs/runbook.md).
 
+## Production infrastructure (AWS, Terraform)
+
+```
+eu-north-1
+ └─ VPC 10.0.0.0/16 ── Internet Gateway
+     └─ public subnet 10.0.1.0/24
+         └─ EC2 t4g.small (ARM, Ubuntu 24.04, gp3 encrypted, IMDSv2) + Elastic IP
+             security group: 22, 6443 from admin IP only; 80/443 public
+```
+
+- State in S3 (`infra/terraform/bootstrap`): versioned, encrypted, private, native S3 locking.
+- No NAT gateway and a single public subnet: deliberate cost trade-off for a one-node setup (~$18/month).
+- Images are multi-arch (amd64 + arm64): the same tag runs on local kind and on the ARM node.
+
+```bash
+make infra-bootstrap   # once: state bucket
+make infra-plan        # preview changes
+make infra-apply       # create / update (admin IP is detected automatically)
+```
+
 ## Repository layout
 
 ```
+infra/terraform/         AWS infrastructure (bootstrap: state bucket, prod: network + node)
 app/                     Python service (jobbot.py core, sources.py job boards), tests, Dockerfile
 deploy/kind-cluster.yaml local cluster definition
 deploy/k8s/base/         manifests shared by all environments

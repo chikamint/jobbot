@@ -40,14 +40,30 @@ jobs:
           kubectl kustomize deploy/k8s/overlays/local \
             | docker run -i --rm ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary -
 
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.5
+      - run: terraform fmt -check -recursive infra/terraform
+      - name: Validate (no AWS credentials needed)
+        run: |
+          for stack in infra/terraform/bootstrap infra/terraform/prod; do
+            terraform -chdir=$stack init -backend=false -input=false
+            terraform -chdir=$stack validate
+          done
+
   image:
-    needs: [test, manifests]
+    needs: [test, manifests, terraform]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write              # push to GHCR with the built-in GITHUB_TOKEN, no personal secrets
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0 — emulates ARM to build arm64 on x86 runners
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - id: meta
@@ -88,6 +104,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: app
+          platforms: linux/amd64,linux/arm64   # prod node is ARM (t4g), local kind is x86
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
