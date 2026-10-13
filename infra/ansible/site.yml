@@ -1,0 +1,8 @@
+# Configures the node created by Terraform: OS baseline, then k3s.
+# Run: make provision   (inventory = the Elastic IP from Terraform output)
+- name: Provision jobbot node
+  hosts: all
+  become: true
+  roles:
+    - base
+    - k3s

@@ -37,8 +37,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Validate Kubernetes manifests against the API schema
         run: |
-          kubectl kustomize deploy/k8s/overlays/local \
-            | docker run -i --rm ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary -
+          for overlay in deploy/k8s/overlays/*/; do
+            echo "== $overlay"
+            kubectl kustomize "$overlay" \
+              | docker run -i --rm ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary -
+          done
 
   terraform:
     runs-on: ubuntu-latest

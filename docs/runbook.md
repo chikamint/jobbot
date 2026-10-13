@@ -26,6 +26,22 @@ All boards are listed in `BOARDS` at the top of `app/sources.py`.
 A new source = one fetcher function yielding `Job(...)` + one entry in `FETCHERS` + a test with a saved sample response.
 Before adding a site check its robots.txt and terms: public channel posts must not violate them.
 
+## Production
+
+```bash
+make prod-status                 # node + pods on AWS
+make prod-logs
+ssh ubuntu@$(terraform -chdir=infra/terraform/prod output -raw public_ip)
+```
+
+**Release a new version**: take the `sha-xxxxxxx` tag from the green CI run, put it into
+`deploy/k8s/overlays/prod/kustomization.yaml` (`newTag`), commit, `make prod-deploy`.
+Rollback = previous tag + `make prod-deploy`.
+
+**SSH / kubectl stopped working** — your home IP changed: `make infra-apply` updates the security group.
+
+**Upgrade k3s** — change `k3s_version` in `infra/ansible/roles/k3s/defaults/main.yml`, `make provision`.
+
 ## Health checks
 
 ```bash

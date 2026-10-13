@@ -1,0 +1,55 @@
+- name: Get installed k3s version
+  ansible.builtin.command: k3s --version
+  register: k3s_installed
+  changed_when: false
+  failed_when: false
+
+- name: Download k3s installer
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /usr/local/bin/k3s-install.sh
+    mode: "0755"
+
+# runs only when k3s is missing or a different version is pinned: the playbook is safe to re-run
+- name: Install k3s {{ k3s_version }}
+  ansible.builtin.command: /usr/local/bin/k3s-install.sh
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: >-
+      server
+      --tls-san {{ k3s_public_ip }}
+      --write-kubeconfig-mode 0600
+      --secrets-encryption
+  when: k3s_version not in (k3s_installed.stdout | default(''))
+  changed_when: true
+
+- name: Wait until the node is Ready
+  ansible.builtin.command: k3s kubectl get nodes --no-headers
+  register: k3s_nodes
+  until: "' Ready ' in k3s_nodes.stdout"
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Read kubeconfig from the node
+  ansible.builtin.slurp:
+    src: /etc/rancher/k3s/k3s.yaml
+  register: k3s_kubeconfig
+
+- name: Ensure local ~/.kube exists
+  delegate_to: localhost
+  become: false
+  ansible.builtin.file:
+    path: "{{ k3s_local_kubeconfig | dirname }}"
+    state: directory
+    mode: "0700"
+
+# Transform in memory and write once: copy compares content, so re-runs report "ok", not "changed"
+- name: Save kubeconfig locally (public IP instead of 127.0.0.1; cluster-admin access -> 0600)
+  delegate_to: localhost
+  become: false
+  diff: false   # never print certificates and keys
+  ansible.builtin.copy:
+    dest: "{{ k3s_local_kubeconfig }}"
+    mode: "0600"
+    content: "{{ k3s_kubeconfig.content | b64decode | replace('https://127.0.0.1:6443', 'https://' ~ k3s_public_ip ~ ':6443') }}"

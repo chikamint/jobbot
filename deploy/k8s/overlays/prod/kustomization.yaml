@@ -1,0 +1,9 @@
+# Production: k3s on the AWS node. Image comes from GHCR, built and scanned by CI.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  - name: jobbot
+    newName: ghcr.io/chikamint/jobbot
+    newTag: sha-c6683e1   # deployed version = git commit; bump to release

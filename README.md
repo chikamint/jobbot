@@ -85,12 +85,19 @@ eu-north-1
 make infra-bootstrap   # once: state bucket
 make infra-plan        # preview changes
 make infra-apply       # create / update (admin IP is detected automatically)
+make provision         # Ansible: OS baseline (updates, swap, SSH hardening) + k3s, fetches kubeconfig
+make prod-deploy       # deploy the image tag pinned in deploy/k8s/overlays/prod
+make prod-status
 ```
+
+Node configuration (`infra/ansible`, roles `base` and `k3s`): unattended security upgrades, 2 GiB swap,
+key-only SSH without root, k3s pinned to a stable version with Secrets encryption at rest.
 
 ## Repository layout
 
 ```
 infra/terraform/         AWS infrastructure (bootstrap: state bucket, prod: network + node)
+infra/ansible/           node configuration: OS baseline + k3s
 app/                     Python service (jobbot.py core, sources.py job boards), tests, Dockerfile
 deploy/kind-cluster.yaml local cluster definition
 deploy/k8s/base/         manifests shared by all environments
@@ -105,6 +112,7 @@ docs/                    runbook
 - [x] Service, PostgreSQL, Kubernetes manifests, local environment
 - [x] CI: tests, manifest validation (kubeconform), image build, Trivy scan, push to GHCR
 - [ ] GitOps deployment with ArgoCD
-- [ ] Production on AWS: Terraform (VPC, EC2), k3s via Ansible, TLS
+- [x] Production on AWS: Terraform (VPC, EC2, S3 state), k3s via Ansible
+- [ ] TLS and public endpoint via Gateway API
 - [ ] Monitoring: Prometheus, Grafana, alerts to Telegram
 - [ ] PostgreSQL backups to S3 with restore test

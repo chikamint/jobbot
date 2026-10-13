@@ -47,7 +47,8 @@ psql:             ## open psql in the database
 	kubectl -n $(NAMESPACE) exec -it postgres-0 -- psql -U postgres
 
 # --- AWS infrastructure (Terraform) ---
-TF_PROD  := terraform -chdir=infra/terraform/prod
+# absolute path: targets may `cd` elsewhere before calling Terraform
+TF_PROD  := terraform -chdir=$(CURDIR)/infra/terraform/prod
 # your current public IP: only it may reach SSH and the Kubernetes API
 MY_CIDR   = $$(curl -s https://checkip.amazonaws.com)/32
 
@@ -66,3 +67,25 @@ infra-apply:      ## create/update AWS infrastructure (asks for confirmation)
 
 infra-destroy:    ## delete everything in prod (asks for confirmation)
 	TF_VAR_admin_cidr=$(MY_CIDR) $(TF_PROD) destroy
+
+# --- Production node (Ansible + k3s) ---
+PROD_IP          = $$($(TF_PROD) output -raw public_ip)
+PROD_KUBECONFIG := $(HOME)/.kube/jobbot-prod.yaml
+
+.PHONY: provision prod-deploy prod-status prod-logs
+
+provision:        ## configure the node: OS baseline + k3s, fetch kubeconfig
+	cd infra/ansible && ansible-playbook -i "$(PROD_IP)," site.yml
+
+prod-deploy:      ## deploy jobbot to production (image tag from overlays/prod)
+	KUBECONFIG=$(PROD_KUBECONFIG) $(MAKE) secrets
+	KUBECONFIG=$(PROD_KUBECONFIG) kubectl apply -k deploy/k8s/overlays/prod
+	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n $(NAMESPACE) rollout status statefulset/postgres
+	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n $(NAMESPACE) rollout status deploy/jobbot
+
+prod-status:      ## pods and nodes in production
+	KUBECONFIG=$(PROD_KUBECONFIG) kubectl get nodes -o wide
+	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n $(NAMESPACE) get all,pvc
+
+prod-logs:        ## follow jobbot logs in production
+	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n $(NAMESPACE) logs deploy/jobbot -f
