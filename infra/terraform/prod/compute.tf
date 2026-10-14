@@ -16,9 +16,13 @@ resource "aws_instance" "node" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.node.id]
   key_name               = aws_key_pair.admin.key_name
+  iam_instance_profile   = aws_iam_instance_profile.node.name # S3 backups without static keys
 
   metadata_options {
     http_tokens = "required" # IMDSv2 only: blocks SSRF attacks that steal instance credentials
+    # 2 hops: a pod is one network hop behind the node, with the default 1 the IMDSv2 token
+    # response never reaches it and the backup job could not get credentials
+    http_put_response_hop_limit = 2
   }
 
   root_block_device {

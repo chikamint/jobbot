@@ -44,6 +44,18 @@ Rollback = previous tag + `make prod-deploy`.
 
 ## Database backup and restore
 
+**Automatic**: CronJob `postgres-backup` runs daily at 03:17 UTC: `pg_dump` → check the dump is readable →
+upload to `s3://jobbot-backups-<account>/postgres/`. S3 deletes dumps older than 14 days.
+Credentials: the node's IAM role (instance profile) via IMDSv2, no keys in the cluster. Alert: `JobbotBackupStale`.
+
+```bash
+make prod-backup-now          # run it now, show logs
+make prod-backups             # list dumps in S3
+make prod-db-restore-s3       # restore the latest dump (or KEY=jobbot-....dump)
+```
+
+**Manual** (to your laptop):
+
 ```bash
 make prod-db-backup                                   # -> backups/jobbot-YYYYmmdd-HHMMSS.dump
 make prod-db-restore FILE=backups/jobbot-....dump     # drops and recreates tables from the dump
@@ -77,6 +89,7 @@ Rules: `deploy/k8s/components/monitoring/prometheusrule.yaml`, tests: `make test
 | JobbotStale | critical | `make prod-logs` → "run failed" traceback; DB: `kubectl -n jobbot get pods` |
 | JobbotRunFailures | warning | same as above, usually DB or network |
 | JobbotSourceFailing | warning | see "One source keeps failing" below |
+| JobbotBackupStale | critical | `kubectl -n jobbot get jobs`, logs of the last `postgres-backup-*` job (`--all-containers`): dump error = DB/secret, upload error = IAM role/bucket |
 | JobbotNoNewVacancies | warning | open the job boards manually; a parser may be silently broken |
 
 UIs: `make prod-prometheus` (targets, alerts, PromQL graphs), `make prod-alertmanager` (active alerts, silences).

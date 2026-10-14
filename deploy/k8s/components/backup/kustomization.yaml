@@ -1,0 +1,5 @@
+# Daily PostgreSQL backup to S3. Prod only: needs the S3 bucket and node IAM role from Terraform.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - cronjob.yaml

@@ -7,6 +7,7 @@ resources:
   - ../../base
 components:
   - ../../components/monitoring   # ServiceMonitor, alerts, Grafana dashboard (needs `make prod-monitoring` first)
+  - ../../components/backup       # daily pg_dump to S3 (needs `make infra-apply` first: bucket + node IAM role)
 images:
   - name: jobbot
     newName: ghcr.io/chikamint/jobbot

@@ -1,0 +1,62 @@
+# Daily PostgreSQL backup to S3.
+# 1) init container: pg_dump -> shared emptyDir, then verify the dump is readable
+# 2) main container: upload to S3 with credentials from the node's IAM role (no keys in the cluster)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+spec:
+  schedule: "17 3 * * *"          # 03:17 UTC daily (off the hour: avoid everyone's "0 * * * *" spike)
+  concurrencyPolicy: Forbid       # never two backups at once
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2              # retry a failed job twice
+      activeDeadlineSeconds: 600   # a hung backup is killed after 10 min
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+          volumes:
+            - name: backup
+              emptyDir: {}
+          initContainers:
+            - name: dump
+              image: postgres:17-alpine     # same major version as the server: pg_dump must not be older
+              command: ["sh", "-c"]
+              args:
+                - >-
+                  pg_dump -Fc -f /backup/jobbot.dump &&
+                  pg_restore --list /backup/jobbot.dump | grep -q "TABLE DATA public jobs" &&
+                  ls -l /backup/jobbot.dump
+              env:
+                - { name: PGHOST, value: postgres }
+                - { name: PGUSER, value: postgres }
+                - { name: PGDATABASE, value: postgres }
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef: { name: postgres, key: password }
+              volumeMounts:
+                - { name: backup, mountPath: /backup }
+              resources:
+                requests: { cpu: 20m, memory: 32Mi }
+                limits: { memory: 128Mi }
+          containers:
+            - name: upload
+              image: amazon/aws-cli:2.38.0
+              command: ["sh", "-c"]
+              args:
+                - aws s3 cp /backup/jobbot.dump "s3://${BUCKET}/postgres/jobbot-$(date -u +%Y%m%d-%H%M%S).dump" --only-show-errors && echo uploaded
+              env:
+                - { name: BUCKET, value: jobbot-backups-840285599922 }
+                - { name: AWS_REGION, value: eu-north-1 }
+                - { name: HOME, value: /tmp }          # aws cli writes a cache dir, root fs is not ours
+              volumeMounts:
+                - { name: backup, mountPath: /backup, readOnly: true }
+              resources:
+                requests: { cpu: 20m, memory: 64Mi }
+                limits: { memory: 192Mi }

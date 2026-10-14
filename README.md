@@ -120,4 +120,4 @@ docs/                    runbook
 - [ ] TLS and public endpoint via Gateway API
 - [x] Monitoring: kube-prometheus-stack trimmed to fit 2 GiB (Prometheus, Alertmanager, exporters; Grafana dropped after it caused swap thrashing), symptom-based alerts unit-tested with promtool, alerts to Telegram
 - [ ] Grafana dashboards via Grafana Cloud (dashboard JSON already in `deploy/k8s/components/monitoring`)
-- [ ] PostgreSQL backups to S3 with restore test
+- [x] PostgreSQL backups: daily CronJob → S3 (14-day lifecycle, IAM instance role, no static keys), freshness alert, restore tested

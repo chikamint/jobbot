@@ -107,6 +107,27 @@ prod-db-restore:  ## restore a dump: make prod-db-restore FILE=backups/jobbot-..
 	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n $(NAMESPACE) exec postgres-0 -- \
 		psql -U postgres -tAc "select count(*) as jobs, count(posted_at) as posted from jobs"
 
+# --- Automated backups in S3 (CronJob postgres-backup, bucket from Terraform) ---
+BACKUP_BUCKET = $$($(TF_PROD) output -raw backup_bucket)
+
+.PHONY: prod-backup-now prod-backups prod-db-restore-s3
+
+prod-backup-now:  ## run the backup CronJob right now and show its logs
+	j=backup-manual-$$(date +%s); export KUBECONFIG=$(PROD_KUBECONFIG); \
+	kubectl -n $(NAMESPACE) create job --from=cronjob/postgres-backup $$j && \
+	kubectl -n $(NAMESPACE) wait --for=condition=complete job/$$j --timeout=300s; \
+	kubectl -n $(NAMESPACE) logs job/$$j --all-containers --prefix
+
+prod-backups:     ## list dumps in S3
+	aws s3 ls s3://$(BACKUP_BUCKET)/postgres/ --region eu-north-1
+
+prod-db-restore-s3: ## restore from S3: make prod-db-restore-s3 [KEY=jobbot-....dump] (default: latest)
+	mkdir -p backups
+	k="$(KEY)"; b=$(BACKUP_BUCKET); \
+	[ -n "$$k" ] || k=$$(aws s3 ls s3://$$b/postgres/ --region eu-north-1 | sort | tail -1 | awk '{print $$4}'); \
+	echo "restoring $$k"; aws s3 cp s3://$$b/postgres/$$k backups/$$k --region eu-north-1 --only-show-errors && \
+	$(MAKE) prod-db-restore FILE=backups/$$k
+
 # --- Monitoring (kube-prometheus-stack) ---
 KPS_VERSION := 92.4.0
 PROD_KUBECTL = KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n monitoring

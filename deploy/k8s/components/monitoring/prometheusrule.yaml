@@ -42,6 +42,22 @@ spec:
             summary: "Job source {{ $labels.source }} keeps failing"
             description: The site may have changed its API or closed the board. See "One source keeps failing" in docs/runbook.md.
 
+        # Daily backup must have succeeded within 26h (24h schedule + slack). Second branch: the CronJob
+        # exists for over 26h but never succeeded at all (then the "last successful" series is absent).
+        - alert: JobbotBackupStale
+          expr: |
+            time() - max(kube_cronjob_status_last_successful_time{namespace="jobbot", cronjob="postgres-backup"}) > 26 * 3600
+            or
+            (
+              time() - max(kube_cronjob_created{namespace="jobbot", cronjob="postgres-backup"}) > 26 * 3600
+              unless max(kube_cronjob_status_last_successful_time{namespace="jobbot", cronjob="postgres-backup"})
+            )
+          labels:
+            severity: critical
+          annotations:
+            summary: No successful PostgreSQL backup for more than 26 hours
+            description: "Check: kubectl -n jobbot get jobs; logs of the last postgres-backup job. See docs/runbook.md."
+
         # A parser broken by a site redesign returns 0 jobs without any error.
         - alert: JobbotNoNewVacancies
           expr: sum(increase(jobbot_jobs_new_total[48h])) == 0

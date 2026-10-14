@@ -76,3 +76,52 @@ tests:
             exp_annotations:
               summary: Job source jobsge keeps failing
               description: The site may have changed its API or closed the board. See "One source keeps failing" in docs/runbook.md.
+
+  - name: daily backups succeed -> no JobbotBackupStale
+    interval: 1h
+    input_series:
+      - series: 'kube_cronjob_created{namespace="jobbot", cronjob="postgres-backup"}'
+        values: '0x60'
+      # success at t=0, 24h, 48h (seconds)
+      - series: 'kube_cronjob_status_last_successful_time{namespace="jobbot", cronjob="postgres-backup"}'
+        values: '0x23 86400x24 172800x12'
+    alert_rule_test:
+      - eval_time: 60h
+        alertname: JobbotBackupStale
+        exp_alerts: []
+
+  - name: backups stopped -> JobbotBackupStale after 26h
+    interval: 1h
+    input_series:
+      - series: 'kube_cronjob_created{namespace="jobbot", cronjob="postgres-backup"}'
+        values: '0x40'
+      - series: 'kube_cronjob_status_last_successful_time{namespace="jobbot", cronjob="postgres-backup"}'
+        values: '0x40'          # last success at t=0, never again
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: JobbotBackupStale
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: JobbotBackupStale
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: No successful PostgreSQL backup for more than 26 hours
+              description: "Check: kubectl -n jobbot get jobs; logs of the last postgres-backup job. See docs/runbook.md."
+
+  - name: backup never succeeded -> JobbotBackupStale after 26h
+    interval: 1h
+    input_series:
+      - series: 'kube_cronjob_created{namespace="jobbot", cronjob="postgres-backup"}'
+        values: '0x40'          # no last_successful_time series at all
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: JobbotBackupStale
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: JobbotBackupStale
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: No successful PostgreSQL backup for more than 26 hours
+              description: "Check: kubectl -n jobbot get jobs; logs of the last postgres-backup job. See docs/runbook.md."
