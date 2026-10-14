@@ -6,4 +6,4 @@ resources:
 images:
   - name: jobbot
     newName: ghcr.io/chikamint/jobbot
-    newTag: sha-c6683e1   # deployed version = git commit; bump to release
+    newTag: sha-3a922b9   # deployed version = git commit; bump to release
