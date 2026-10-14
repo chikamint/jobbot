@@ -1,0 +1,21 @@
+# Flux (GitOps) for production: only the two controllers we need.
+#   gotk-components.yaml: `flux install --components=source-controller,kustomize-controller --export` (Flux v2.9.6)
+#   sync.yaml:            what to pull from git and where to apply it
+# Install / upgrade: make prod-flux
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - sync.yaml
+patches:
+  # Defaults are 1 GiB memory limit per controller — enough to push a 2 GiB node into swap.
+  # With 128 MiB a misbehaving controller gets OOMKilled alone instead of taking the node down.
+  - target:
+      kind: Deployment
+      name: (source-controller|kustomize-controller)
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: 20m, memory: 48Mi }
+          limits: { memory: 128Mi }

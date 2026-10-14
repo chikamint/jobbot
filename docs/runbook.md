@@ -34,9 +34,14 @@ make prod-logs
 ssh ubuntu@$(terraform -chdir=infra/terraform/prod output -raw public_ip)
 ```
 
-**Release a new version**: take the `sha-xxxxxxx` tag from the green CI run, put it into
-`deploy/k8s/overlays/prod/kustomization.yaml` (`newTag`), commit, `make prod-deploy`.
-Rollback = previous tag + `make prod-deploy`.
+**Release (GitOps, automatic)**: push to `main` → CI tests, builds and scans the image → job `release`
+commits `newTag: sha-<commit>` to `deploy/k8s/overlays/prod/kustomization.yaml` → Flux in the cluster
+pulls `main` within a minute and rolls it out. Nobody runs kubectl against production.
+- `make prod-flux-status` — deployed git revision and health; `make prod-sync` — apply now, don't wait.
+- **Rollback**: `git revert <release commit>` and push. Flux applies the previous tag.
+- Manual changes in the cluster are reverted by Flux every 10 minutes (drift correction).
+- After CI made a release commit, run `git pull` before your next push.
+- Secrets are not in git: Flux never creates or deletes them (`make secrets`, `telegram`, `alertmanager-telegram`).
 
 **SSH / kubectl stopped working** — your home IP changed: `make infra-apply` updates the security group.
 
@@ -74,7 +79,7 @@ The AWS free plan forbids changing the instance type in place, so a resize = a n
 3. `ssh-keygen -R <ip>` — the new node has a new SSH host key
 4. `make provision` — OS baseline + k3s, fresh kubeconfig
 5. `make prod-monitoring-secrets && make prod-monitoring`
-6. `make prod-deploy` — no `telegram` Secret yet, bot runs in dry-run
+6. `make secrets && make prod-flux` — Flux deploys from git; no `telegram` Secret yet, bot runs in dry-run
 7. `make prod-db-restore FILE=...`
 8. create the `telegram` Secret (see "Connect Telegram"), `kubectl -n jobbot rollout restart deploy/jobbot`
 

@@ -3,5 +3,9 @@ k3s_version: v1.36.5+k3s1
 # public address to put into the API server certificate and the kubeconfig.
 # inventory_hostname, not ansible_host: it is also defined in tasks delegated to localhost
 k3s_public_ip: "{{ inventory_hostname }}"
+# bundled k3s add-ons we do not use (no public HTTP services yet): ~100 MiB back on a 2 GiB node
+k3s_disable:
+  - traefik
+  - servicelb
 # kubeconfig is saved on the machine that runs Ansible
 k3s_local_kubeconfig: "{{ lookup('env', 'HOME') }}/.kube/jobbot-prod.yaml"

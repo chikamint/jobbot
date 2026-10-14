@@ -77,7 +77,7 @@ PROD_KUBECONFIG := $(HOME)/.kube/jobbot-prod.yaml
 provision:        ## configure the node: OS baseline + k3s, fetch kubeconfig
 	cd infra/ansible && ansible-playbook -i "$(PROD_IP)," site.yml
 
-prod-deploy:      ## deploy jobbot to production (image tag from overlays/prod)
+prod-deploy:      ## manual apply (bootstrap / fallback; normally Flux deploys from git, see prod-sync)
 	KUBECONFIG=$(PROD_KUBECONFIG) $(MAKE) secrets
 	KUBECONFIG=$(PROD_KUBECONFIG) kubectl apply -k deploy/k8s/overlays/prod
 	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n $(NAMESPACE) rollout status statefulset/postgres
@@ -89,6 +89,21 @@ prod-status:      ## pods and nodes in production
 
 prod-logs:        ## follow jobbot logs in production
 	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n $(NAMESPACE) logs deploy/jobbot -f
+
+# --- GitOps (Flux): production follows the main branch ---
+.PHONY: prod-flux prod-sync prod-flux-status
+
+prod-flux:        ## install/upgrade Flux (2 controllers) and the jobbot sync config
+	KUBECONFIG=$(PROD_KUBECONFIG) kubectl apply --server-side --force-conflicts -k deploy/flux
+
+prod-sync:        ## don't wait for the 1-minute poll: fetch git and apply now
+	export KUBECONFIG=$(PROD_KUBECONFIG); t=$$(date +%s); \
+	kubectl -n flux-system annotate --overwrite gitrepository/jobbot reconcile.fluxcd.io/requestedAt=$$t && \
+	kubectl -n flux-system annotate --overwrite kustomization/jobbot-prod reconcile.fluxcd.io/requestedAt=$$t && \
+	kubectl -n flux-system wait kustomization/jobbot-prod --for=condition=Ready --timeout=5m
+
+prod-flux-status: ## what revision is deployed, is it healthy
+	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n flux-system get gitrepository,kustomization
 
 # --- Database backup / restore (production) ---
 .PHONY: prod-db-backup prod-db-restore

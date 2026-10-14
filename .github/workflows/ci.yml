@@ -45,6 +45,13 @@ jobs:
               | docker run -i --rm ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary \
                   -schema-location default -schema-location "$CRD_SCHEMAS" -
           done
+      - name: Validate Flux manifests (CRDs themselves have no schema, skip them)
+        env:
+          CRD_SCHEMAS: https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+        run: |
+          kubectl kustomize deploy/flux \
+            | docker run -i --rm ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary -skip CustomResourceDefinition \
+                -schema-location default -schema-location "$CRD_SCHEMAS" -
       - name: Every namespaced object must land in "jobbot" (not silently in "default")
         run: |
           pip install pyyaml
@@ -115,7 +122,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: app
@@ -124,3 +131,26 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
+
+  # CD (GitOps): the pipeline never touches the cluster. It only records the new image tag in git;
+  # Flux in the cluster pulls main and rolls it out. Rollback = revert this commit.
+  release:
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write              # push the tag bump; commits made with GITHUB_TOKEN do not trigger CI again
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - name: Point production at the image built from this commit
+        run: |
+          tag="sha-${GITHUB_SHA::7}"     # same format as docker/metadata-action type=sha,format=short
+          sed -i -E "s/(newTag: )sha-[0-9a-f]+/\1${tag}/" deploy/k8s/overlays/prod/kustomization.yaml
+          if git diff --quiet; then echo "production already at ${tag}"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "release: jobbot ${tag} [skip ci]"
+          git pull --rebase origin main    # main may have moved while CI was running
+          git push origin HEAD:main

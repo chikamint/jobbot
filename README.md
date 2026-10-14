@@ -86,7 +86,8 @@ make infra-bootstrap   # once: state bucket
 make infra-plan        # preview changes
 make infra-apply       # create / update (admin IP is detected automatically)
 make provision         # Ansible: OS baseline (updates, swap, SSH hardening) + k3s, fetches kubeconfig
-make prod-deploy       # deploy the image tag pinned in deploy/k8s/overlays/prod
+make prod-flux         # GitOps: Flux follows main and deploys deploy/k8s/overlays/prod
+make prod-flux-status  # deployed revision
 make prod-status
 make prod-monitoring-secrets && make prod-monitoring   # Prometheus + Alertmanager
 make prod-prometheus   # Prometheus UI on http://localhost:9090
@@ -115,7 +116,7 @@ docs/                    runbook
 
 - [x] Service, PostgreSQL, Kubernetes manifests, local environment
 - [x] CI: tests, manifest validation (kubeconform), image build, Trivy scan, push to GHCR
-- [ ] GitOps deployment with ArgoCD
+- [x] GitOps with Flux: CI records the image tag in git, Flux (2 controllers, memory-capped) pulls and applies; drift is reverted
 - [x] Production on AWS: Terraform (VPC, EC2, S3 state), k3s via Ansible
 - [ ] TLS and public endpoint via Gateway API
 - [x] Monitoring: kube-prometheus-stack trimmed to fit 2 GiB (Prometheus, Alertmanager, exporters; Grafana dropped after it caused swap thrashing), symptom-based alerts unit-tested with promtool, alerts to Telegram
