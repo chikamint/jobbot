@@ -1,6 +1,8 @@
 # Production: k3s on the AWS node. Image comes from GHCR, built and scanned by CI.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+# base sets its own namespace, but objects added here (components) would otherwise land in "default"
+namespace: jobbot
 resources:
   - ../../base
 components:
