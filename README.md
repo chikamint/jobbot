@@ -73,7 +73,7 @@ Operations: [docs/runbook.md](docs/runbook.md).
 eu-north-1
  └─ VPC 10.0.0.0/16 ── Internet Gateway
      └─ public subnet 10.0.1.0/24
-         └─ EC2 t4g.small (ARM, Ubuntu 24.04, gp3 encrypted, IMDSv2) + Elastic IP
+         └─ EC2 t4g.small (ARM, 2 GiB, Ubuntu 24.04, gp3 encrypted, IMDSv2) + Elastic IP
              security group: 22, 6443 from admin IP only; 80/443 public
 ```
 
@@ -88,6 +88,8 @@ make infra-apply       # create / update (admin IP is detected automatically)
 make provision         # Ansible: OS baseline (updates, swap, SSH hardening) + k3s, fetches kubeconfig
 make prod-deploy       # deploy the image tag pinned in deploy/k8s/overlays/prod
 make prod-status
+make prod-monitoring-secrets && make prod-monitoring   # Prometheus + Alertmanager
+make prod-prometheus   # Prometheus UI on http://localhost:9090
 ```
 
 Node configuration (`infra/ansible`, roles `base` and `k3s`): unattended security upgrades, 2 GiB swap,
@@ -102,6 +104,8 @@ app/                     Python service (jobbot.py core, sources.py job boards),
 deploy/kind-cluster.yaml local cluster definition
 deploy/k8s/base/         manifests shared by all environments
 deploy/k8s/overlays/     per-environment settings (local, prod)
+deploy/k8s/components/   optional pieces (monitoring: ServiceMonitor, alerts + tests, dashboard)
+deploy/monitoring/       kube-prometheus-stack values
 scripts/                 tooling install
 docs/                    runbook
 .github/workflows/       CI pipeline
@@ -114,5 +118,6 @@ docs/                    runbook
 - [ ] GitOps deployment with ArgoCD
 - [x] Production on AWS: Terraform (VPC, EC2, S3 state), k3s via Ansible
 - [ ] TLS and public endpoint via Gateway API
-- [ ] Monitoring: Prometheus, Grafana, alerts to Telegram
+- [x] Monitoring: kube-prometheus-stack trimmed to fit 2 GiB (Prometheus, Alertmanager, exporters; Grafana dropped after it caused swap thrashing), symptom-based alerts unit-tested with promtool, alerts to Telegram
+- [ ] Grafana dashboards via Grafana Cloud (dashboard JSON already in `deploy/k8s/components/monitoring`)
 - [ ] PostgreSQL backups to S3 with restore test

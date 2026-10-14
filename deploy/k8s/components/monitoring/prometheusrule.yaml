@@ -1,0 +1,53 @@
+# Alerts for jobbot. Unit-tested with promtool: deploy/k8s/components/monitoring/tests/.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: jobbot
+spec:
+  groups:
+    - name: jobbot
+      rules:
+        - alert: JobbotDown
+          expr: absent(up{job="jobbot"} == 1)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: jobbot metrics endpoint is not reachable
+            description: Pod is not running or not answering on :8000/metrics for 5 minutes.
+
+        # The bot can be "Running" and still do nothing (DB down, every source broken).
+        # The only honest signal is the time of the last successful run.
+        - alert: JobbotStale
+          expr: time() - jobbot_last_success_timestamp_seconds > 2 * 3600
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "jobbot has not completed a run for {{ $value | humanizeDuration }}"
+            description: Check `make prod-logs` for "run failed", then PostgreSQL. See docs/runbook.md.
+
+        - alert: JobbotRunFailures
+          expr: increase(jobbot_run_failures_total[3h]) > 1
+          labels:
+            severity: warning
+          annotations:
+            summary: "jobbot runs are failing ({{ $value | humanize }} in 3h)"
+
+        - alert: JobbotSourceFailing
+          expr: sum by (source) (increase(jobbot_source_errors_total[6h])) > 5
+          labels:
+            severity: warning
+          annotations:
+            summary: "Job source {{ $labels.source }} keeps failing"
+            description: The site may have changed its API or closed the board. See "One source keeps failing" in docs/runbook.md.
+
+        # A parser broken by a site redesign returns 0 jobs without any error.
+        - alert: JobbotNoNewVacancies
+          expr: sum(increase(jobbot_jobs_new_total[48h])) == 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: No new vacancies saved for 48 hours
+            description: Either the market is dead or parsers silently broke. Compare with the job boards manually.

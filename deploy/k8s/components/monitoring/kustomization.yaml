@@ -1,0 +1,15 @@
+# Monitoring for jobbot: what to scrape, when to alert, what to show.
+# A Kustomize *component*: added only to overlays that have Prometheus Operator (prod).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - servicemonitor.yaml
+  - prometheusrule.yaml
+configMapGenerator:
+  - name: jobbot-dashboard
+    files:
+      - jobbot.json=dashboard.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"   # Grafana sidecar loads every ConfigMap with this label

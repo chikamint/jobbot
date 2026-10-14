@@ -89,3 +89,48 @@ prod-status:      ## pods and nodes in production
 
 prod-logs:        ## follow jobbot logs in production
 	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n $(NAMESPACE) logs deploy/jobbot -f
+
+# --- Database backup / restore (production) ---
+.PHONY: prod-db-backup prod-db-restore
+
+prod-db-backup:   ## dump production PostgreSQL to backups/ (custom format, compressed)
+	mkdir -p backups
+	f=backups/jobbot-$$(date +%Y%m%d-%H%M%S).dump; \
+	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n $(NAMESPACE) exec postgres-0 -- pg_dump -U postgres -Fc postgres > $$f && \
+	ls -lh $$f && \
+	docker run --rm -i postgres:17-alpine pg_restore --list < $$f | grep -E "TABLE (DATA )?public jobs"   # dump is readable
+
+prod-db-restore:  ## restore a dump: make prod-db-restore FILE=backups/jobbot-....dump
+	@test -f "$(FILE)" || { echo "usage: make prod-db-restore FILE=backups/<file>.dump"; exit 1; }
+	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n $(NAMESPACE) exec -i postgres-0 -- \
+		pg_restore -U postgres -d postgres --clean --if-exists --no-owner < $(FILE)
+	KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n $(NAMESPACE) exec postgres-0 -- \
+		psql -U postgres -tAc "select count(*) as jobs, count(posted_at) as posted from jobs"
+
+# --- Monitoring (kube-prometheus-stack) ---
+KPS_VERSION := 92.4.0
+PROD_KUBECTL = KUBECONFIG=$(PROD_KUBECONFIG) kubectl -n monitoring
+
+.PHONY: prod-monitoring-secrets prod-monitoring prod-prometheus prod-alertmanager test-alerts
+
+prod-monitoring-secrets:  ## once: Telegram bot token + your chat id for alerts (asked interactively)
+	$(PROD_KUBECTL) create namespace monitoring --dry-run=client -o yaml | KUBECONFIG=$(PROD_KUBECONFIG) kubectl apply -f -
+	@$(PROD_KUBECTL) get secret alertmanager-telegram >/dev/null 2>&1 || { \
+		read -rsp "Telegram bot token for alerts: " t; echo; read -rp "Your Telegram chat id (number): " c; \
+		$(PROD_KUBECTL) create secret generic alertmanager-telegram --from-literal=token="$$t" --from-literal=chat_id="$$c"; }
+
+prod-monitoring:  ## install/upgrade Prometheus + Alertmanager in production
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update >/dev/null
+	KUBECONFIG=$(PROD_KUBECONFIG) helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+		--version $(KPS_VERSION) -n monitoring -f deploy/monitoring/values.yaml --wait --timeout 10m
+
+prod-prometheus:  ## open Prometheus UI on http://localhost:9090 (targets, alerts, graphs)
+	$(PROD_KUBECTL) port-forward svc/monitoring-kube-prometheus-prometheus 9090
+
+prod-alertmanager: ## open Alertmanager UI on http://localhost:9093 (active alerts, silences)
+	$(PROD_KUBECTL) port-forward svc/monitoring-kube-prometheus-alertmanager 9093
+
+test-alerts:      ## unit-test alert rules with promtool
+	python3 -c "import yaml,sys; yaml.safe_dump(yaml.safe_load(open('deploy/k8s/components/monitoring/prometheusrule.yaml'))['spec'], open('deploy/k8s/components/monitoring/tests/rules.yml','w'))"
+	docker run --rm -v "$(CURDIR)/deploy/k8s/components/monitoring/tests":/t -w /t --entrypoint promtool \
+		quay.io/prometheus/prometheus:v3.15.0 test rules rules_test.yml

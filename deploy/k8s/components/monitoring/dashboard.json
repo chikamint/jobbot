@@ -1,0 +1,91 @@
+{
+  "title": "jobbot",
+  "uid": "jobbot",
+  "schemaVersion": 39,
+  "editable": false,
+  "time": { "from": "now-7d", "to": "now" },
+  "refresh": "5m",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Since last successful run",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "time() - jobbot_last_success_timestamp_seconds" } ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 4000 },
+            { "color": "red", "value": 7200 }
+          ] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Posted to Telegram (24h)",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "sum(increase(jobbot_jobs_posted_total[24h]))" } ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } }
+    },
+    {
+      "type": "stat",
+      "title": "New vacancies (24h)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "sum(increase(jobbot_jobs_new_total[24h]))" } ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } }
+    },
+    {
+      "type": "stat",
+      "title": "Failed runs (24h)",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "sum(increase(jobbot_run_failures_total[24h]))" } ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 1 }
+          ] }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "New vacancies per hour, by source",
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "sum by (source) (increase(jobbot_jobs_new_total[1h]))", "legendFormat": "{{source}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Source errors per hour",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "sum by (source) (increase(jobbot_source_errors_total[1h]))", "legendFormat": "{{source}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars" } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory: jobbot namespace",
+      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"jobbot\", container!=\"\"})", "legendFormat": "{{pod}}" } ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Node memory available",
+      "gridPos": { "x": 12, "y": 14, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "node_memory_MemAvailable_bytes", "legendFormat": "available" } ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    }
+  ]
+}

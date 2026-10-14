@@ -35,13 +35,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Validate Kubernetes manifests against the API schema
+      - name: Validate Kubernetes manifests against the API schema (incl. Prometheus Operator CRDs)
+        env:
+          CRD_SCHEMAS: https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
         run: |
           for overlay in deploy/k8s/overlays/*/; do
             echo "== $overlay"
             kubectl kustomize "$overlay" \
-              | docker run -i --rm ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary -
+              | docker run -i --rm ghcr.io/yannh/kubeconform:v0.8.0 -strict -summary \
+                  -schema-location default -schema-location "$CRD_SCHEMAS" -
           done
+      - name: Unit-test alert rules (promtool)
+        run: pip install pyyaml && make test-alerts
 
   terraform:
     runs-on: ubuntu-latest

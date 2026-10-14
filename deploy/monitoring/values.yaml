@@ -1,0 +1,90 @@
+# kube-prometheus-stack, trimmed for a single 2 GiB k3s node.
+# Installed by `make prod-monitoring` (chart version is pinned in the Makefile).
+# History: the full stack with Grafana pushed the node into swap thrashing (81% iowait, NotReady),
+# and the AWS free plan does not allow a bigger instance type. Kept: Prometheus + Alertmanager + exporters.
+
+# k3s runs the control plane inside one binary and uses SQLite instead of etcd:
+# these endpoints are not exposed, scraping them would only produce "target down" alerts.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    scrapeInterval: 60s          # default 30s; a hourly job needs no more, halves memory and disk
+    evaluationInterval: 60s
+    retention: 3d
+    retentionSize: 1GB
+    # pick up ServiceMonitors / PrometheusRules from any namespace, not only ones labelled with the release
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    resources:
+      requests: { cpu: 50m, memory: 192Mi }
+      limits: { memory: 384Mi }
+    storageSpec:                 # keep metrics across Prometheus restarts
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+
+alertmanager:
+  alertmanagerSpec:
+    # mounted at /etc/alertmanager/secrets/alertmanager-telegram/{token,chat_id}
+    secrets: [alertmanager-telegram]
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 64Mi }
+  config:
+    global:
+      resolve_timeout: 5m
+    inhibit_rules:                # a critical alert mutes warnings about the same thing
+      - source_matchers: ['severity = critical']
+        target_matchers: ['severity =~ warning|info']
+        equal: ['namespace', 'alertname']
+      - source_matchers: ['severity = warning']
+        target_matchers: ['severity = info']
+        equal: ['namespace', 'alertname']
+    route:
+      group_by: ['namespace', 'alertname']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: telegram
+      routes:
+        - receiver: 'null'        # Watchdog always fires by design (proves the pipeline is alive)
+          matchers: ['alertname =~ "Watchdog|InfoInhibitor"']
+        - receiver: 'null'
+          matchers: ['severity = "info"']
+    receivers:
+      - name: 'null'
+      - name: telegram
+        telegram_configs:
+          - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram/token
+            chat_id_file: /etc/alertmanager/secrets/alertmanager-telegram/chat_id
+            send_resolved: true
+
+grafana:
+  enabled: false                  # ~200 MiB that a 2 GiB node cannot spare; graphs: Prometheus UI (make prod-prometheus)
+
+prometheusOperator:
+  resources:
+    requests: { cpu: 20m, memory: 48Mi }
+    limits: { memory: 128Mi }
+
+kube-state-metrics:
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 96Mi }
+
+prometheus-node-exporter:
+  resources:
+    requests: { cpu: 10m, memory: 16Mi }
+    limits: { memory: 48Mi }

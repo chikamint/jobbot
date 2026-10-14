@@ -42,6 +42,45 @@ Rollback = previous tag + `make prod-deploy`.
 
 **Upgrade k3s** — change `k3s_version` in `infra/ansible/roles/k3s/defaults/main.yml`, `make provision`.
 
+## Database backup and restore
+
+```bash
+make prod-db-backup                                   # -> backups/jobbot-YYYYmmdd-HHMMSS.dump
+make prod-db-restore FILE=backups/jobbot-....dump     # drops and recreates tables from the dump
+```
+Restore order matters: restore **before** the bot gets the `telegram` Secret, otherwise it posts
+everything it finds into an empty database as "new".
+
+## Rebuild the node from scratch (disaster recovery / resize on the free plan)
+
+The AWS free plan forbids changing the instance type in place, so a resize = a new node.
+**Check first** that the target type is allowed: `aws ec2 describe-instance-types --region eu-north-1 --filters Name=free-tier-eligible,Values=true`.
+`--dry-run` does NOT catch free-plan restrictions (it only checks IAM/SCP).
+1. `make prod-db-backup`
+2. `TF_VAR_admin_cidr=$(curl -s https://checkip.amazonaws.com)/32 terraform -chdir=infra/terraform/prod apply -replace=aws_instance.node`
+   (Elastic IP moves to the new node; the old disk and everything on it is deleted)
+3. `ssh-keygen -R <ip>` — the new node has a new SSH host key
+4. `make provision` — OS baseline + k3s, fresh kubeconfig
+5. `make prod-monitoring-secrets && make prod-monitoring`
+6. `make prod-deploy` — no `telegram` Secret yet, bot runs in dry-run
+7. `make prod-db-restore FILE=...`
+8. create the `telegram` Secret (see "Connect Telegram"), `kubectl -n jobbot rollout restart deploy/jobbot`
+
+## Monitoring and alerts
+
+Alerts go to your Telegram (Secret `alertmanager-telegram` in namespace `monitoring`).
+Rules: `deploy/k8s/components/monitoring/prometheusrule.yaml`, tests: `make test-alerts`.
+
+| Alert | Severity | First steps |
+|---|---|---|
+| JobbotDown | critical | `make prod-status`: pod state, `kubectl describe pod`, events |
+| JobbotStale | critical | `make prod-logs` → "run failed" traceback; DB: `kubectl -n jobbot get pods` |
+| JobbotRunFailures | warning | same as above, usually DB or network |
+| JobbotSourceFailing | warning | see "One source keeps failing" below |
+| JobbotNoNewVacancies | warning | open the job boards manually; a parser may be silently broken |
+
+UIs: `make prod-prometheus` (targets, alerts, PromQL graphs), `make prod-alertmanager` (active alerts, silences).
+
 ## Health checks
 
 ```bash

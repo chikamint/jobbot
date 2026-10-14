@@ -7,7 +7,10 @@ variable "region" {
 variable "instance_type" {
   description = "EC2 type. ARM (t4g) is ~20% cheaper than x86 for the same size."
   type        = string
-  default     = "t4g.small" # 2 vCPU, 2 GiB
+  # 2 vCPU, 2 GiB. The AWS free plan only allows free-tier-eligible types
+  # (`aws ec2 describe-instance-types --filters Name=free-tier-eligible,Values=true`) and forbids
+  # changing the type in place. The only eligible 4 GiB option, c7i-flex.large, costs ~$66/month.
+  default = "t4g.small"
 }
 
 variable "root_volume_gb" {

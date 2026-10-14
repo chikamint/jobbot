@@ -1,0 +1,12 @@
+# Tells Prometheus Operator: scrape /metrics of every pod behind Service "jobbot", port "metrics".
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jobbot
+spec:
+  selector:
+    matchLabels:
+      app: jobbot
+  endpoints:
+    - port: metrics
+      interval: 60s

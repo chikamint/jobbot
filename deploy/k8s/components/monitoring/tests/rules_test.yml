@@ -1,0 +1,78 @@
+# promtool unit tests for jobbot alerts. Run: make test-alerts
+rule_files:
+  - rules.yml   # extracted from ../prometheusrule.yaml by the Makefile
+
+evaluation_interval: 1m
+
+tests:
+  - name: bot runs fine -> no alerts
+    interval: 1m
+    input_series:
+      - series: 'up{job="jobbot"}'
+        values: '1x180'
+      # last success at t=0 and refreshed every hour (3600 s)
+      - series: 'jobbot_last_success_timestamp_seconds'
+        values: '0x59 3600x60 7200x60'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: JobbotStale
+        exp_alerts: []
+      - eval_time: 3h
+        alertname: JobbotDown
+        exp_alerts: []
+
+  - name: bot alive but stuck -> JobbotStale after 2h + 10m
+    interval: 1m
+    input_series:
+      - series: 'up{job="jobbot"}'
+        values: '1x200'
+      - series: 'jobbot_last_success_timestamp_seconds'
+        values: '0x200'        # never updated again
+    alert_rule_test:
+      - eval_time: 2h5m
+        alertname: JobbotStale
+        exp_alerts: []          # stale, but "for: 10m" has not passed yet
+      - eval_time: 2h15m
+        alertname: JobbotStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "jobbot has not completed a run for 2h 15m 0s"
+              description: Check `make prod-logs` for "run failed", then PostgreSQL. See docs/runbook.md.
+
+  - name: pod gone -> JobbotDown after 5m
+    interval: 1m
+    input_series:
+      - series: 'up{job="jobbot"}'
+        values: '1x10 0x20'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: JobbotDown
+        exp_alerts: []
+      - eval_time: 17m
+        alertname: JobbotDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: jobbot metrics endpoint is not reachable
+              description: Pod is not running or not answering on :8000/metrics for 5 minutes.
+
+  - name: one source broken -> JobbotSourceFailing for that source only
+    interval: 1m
+    input_series:
+      - series: 'jobbot_source_errors_total{source="jobsge"}'
+        values: '0+1x400'      # +1 error every minute
+      - series: 'jobbot_source_errors_total{source="habr"}'
+        values: '0x400'
+    alert_rule_test:
+      - eval_time: 6h
+        alertname: JobbotSourceFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: jobsge
+            exp_annotations:
+              summary: Job source jobsge keeps failing
+              description: The site may have changed its API or closed the board. See "One source keeps failing" in docs/runbook.md.
