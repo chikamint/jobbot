@@ -47,15 +47,13 @@ jobs:
           done
       - name: Every namespaced object must land in "jobbot" (not silently in "default")
         run: |
+          pip install pyyaml
           for overlay in deploy/k8s/overlays/*/; do
-            kubectl kustomize "$overlay" | python3 -c '
-          import sys, yaml
-          bad = [f"{d[\"kind\"]}/{d[\"metadata\"][\"name\"]}" for d in yaml.safe_load_all(sys.stdin)
-                 if d["kind"] != "Namespace" and d["metadata"].get("namespace") != "jobbot"]
-          sys.exit(f"outside namespace jobbot: {bad}" if bad else 0)'
+            echo "== $overlay"
+            kubectl kustomize "$overlay" | python3 scripts/check_namespace.py jobbot
           done
       - name: Unit-test alert rules (promtool)
-        run: pip install pyyaml && make test-alerts
+        run: make test-alerts
 
   terraform:
     runs-on: ubuntu-latest
