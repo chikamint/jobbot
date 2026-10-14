@@ -70,6 +70,10 @@ alertmanager:
           - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram/token
             chat_id_file: /etc/alertmanager/secrets/alertmanager-telegram/chat_id
             send_resolved: true
+            parse_mode: HTML
+            # compact message instead of the default label dump; template: deploy/monitoring/telegram.tmpl
+            # (passed with `helm --set-file alertmanager.templateFiles.telegram\.tmpl=...`)
+            message: '{{ template "telegram.jobbot" . }}'
 
 grafana:
   enabled: false                  # ~200 MiB that a 2 GiB node cannot spare; graphs: Prometheus UI (make prod-prometheus)

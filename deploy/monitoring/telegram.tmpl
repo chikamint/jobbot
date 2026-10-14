@@ -1,0 +1,17 @@
+{{/*
+  Compact Telegram message (parse_mode HTML). One message per alert group (group_by: namespace, alertname).
+  Values from labels/annotations are passed through `html` so "<" or "&" in a description cannot break the markup.
+*/}}
+{{ define "telegram.jobbot" -}}
+{{ if eq .Status "firing" }}🔥{{ else }}✅{{ end }} <b>{{ .CommonLabels.alertname | html }}</b>{{ if eq .Status "resolved" }} — resolved{{ end }}
+{{- range .Alerts }}
+
+{{ if eq .Labels.severity "critical" }}🔴{{ else if eq .Labels.severity "warning" }}🟠{{ else }}⚪️{{ end }} {{ .Annotations.summary | html }}
+{{- with .Annotations.description }}
+<i>{{ . | html }}</i>{{ end }}
+{{- if or .Labels.namespace .Labels.pod .Labels.source }}
+{{ with .Labels.namespace }}ns: <code>{{ . | html }}</code> {{ end }}{{ with .Labels.pod }}pod: <code>{{ . | html }}</code> {{ end }}{{ with .Labels.source }}source: <code>{{ . | html }}</code>{{ end }}{{ end }}
+{{ if eq $.Status "firing" }}since {{ .StartsAt.UTC.Format "15:04 UTC, 02 Jan" }}{{ else }}ended {{ .EndsAt.UTC.Format "15:04 UTC" }}{{ end }}
+{{- with .Annotations.runbook_url }} · <a href="{{ . }}">runbook</a>{{ end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,27 @@
+{
+  "receiver": "telegram",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": { "alertname": "JobbotSourceFailing", "severity": "warning", "source": "jobsge" },
+      "annotations": {
+        "summary": "Job source jobsge keeps failing",
+        "description": "The site may have changed its API or closed the board. See \"One source keeps failing\" in docs/runbook.md."
+      },
+      "startsAt": "2026-10-14T09:03:57Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "status": "firing",
+      "labels": { "alertname": "JobbotSourceFailing", "severity": "warning", "source": "habr" },
+      "annotations": { "summary": "Job source habr keeps failing <& test>" },
+      "startsAt": "2026-10-14T09:05:00Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    }
+  ],
+  "groupLabels": { "alertname": "JobbotSourceFailing" },
+  "commonLabels": { "alertname": "JobbotSourceFailing", "severity": "warning" },
+  "commonAnnotations": {},
+  "externalURL": "http://alertmanager"
+}

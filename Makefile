@@ -117,12 +117,15 @@ prod-monitoring-secrets:  ## once: Telegram bot token + your chat id for alerts 
 	$(PROD_KUBECTL) create namespace monitoring --dry-run=client -o yaml | KUBECONFIG=$(PROD_KUBECONFIG) kubectl apply -f -
 	@$(PROD_KUBECTL) get secret alertmanager-telegram >/dev/null 2>&1 || { \
 		read -rsp "Telegram bot token for alerts: " t; echo; read -rp "Your Telegram chat id (number): " c; \
+		echo "$$t" | grep -qE '^[0-9]+:[A-Za-z0-9_-]{30,}$$' || { echo "token format is wrong (expected 123456:ABC...)"; exit 1; }; \
+		echo "$$c" | grep -qE '^-?[0-9]+$$' || { echo "chat id must be a number"; exit 1; }; \
 		$(PROD_KUBECTL) create secret generic alertmanager-telegram --from-literal=token="$$t" --from-literal=chat_id="$$c"; }
 
 prod-monitoring:  ## install/upgrade Prometheus + Alertmanager in production
 	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update >/dev/null
 	KUBECONFIG=$(PROD_KUBECONFIG) helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
-		--version $(KPS_VERSION) -n monitoring -f deploy/monitoring/values.yaml --wait --timeout 10m
+		--version $(KPS_VERSION) -n monitoring -f deploy/monitoring/values.yaml \
+		--set-file 'alertmanager.templateFiles.telegram\.tmpl=deploy/monitoring/telegram.tmpl' --wait --timeout 10m
 
 prod-prometheus:  ## open Prometheus UI on http://localhost:9090 (targets, alerts, graphs)
 	$(PROD_KUBECTL) port-forward svc/monitoring-kube-prometheus-prometheus 9090
@@ -130,7 +133,10 @@ prod-prometheus:  ## open Prometheus UI on http://localhost:9090 (targets, alert
 prod-alertmanager: ## open Alertmanager UI on http://localhost:9093 (active alerts, silences)
 	$(PROD_KUBECTL) port-forward svc/monitoring-kube-prometheus-alertmanager 9093
 
-test-alerts:      ## unit-test alert rules with promtool
+test-alerts:      ## unit-test alert rules (promtool) and render the Telegram template (amtool)
 	python3 -c "import yaml,sys; yaml.safe_dump(yaml.safe_load(open('deploy/k8s/components/monitoring/prometheusrule.yaml'))['spec'], open('deploy/k8s/components/monitoring/tests/rules.yml','w'))"
 	docker run --rm -v "$(CURDIR)/deploy/k8s/components/monitoring/tests":/t -w /t --entrypoint promtool \
 		quay.io/prometheus/prometheus:v3.15.0 test rules rules_test.yml
+	docker run --rm -v "$(CURDIR)/deploy/monitoring":/t -w /t --entrypoint amtool quay.io/prometheus/alertmanager:v0.34.1 \
+		template render --template.glob=telegram.tmpl --template.data=tests/telegram-data.json \
+		--template.text='{{ template "telegram.jobbot" . }}'
