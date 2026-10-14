@@ -11,4 +11,4 @@ components:
 images:
   - name: jobbot
     newName: ghcr.io/chikamint/jobbot
-    newTag: sha-3a922b9   # deployed version = git commit; bump to release
+    newTag: sha-527aa07   # deployed version = git commit; bump to release
