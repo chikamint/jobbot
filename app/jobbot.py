@@ -3,6 +3,8 @@ stores them in PostgreSQL and posts new ones to a Telegram channel."""
 import logging
 import os
 import re
+import signal
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -110,6 +112,9 @@ def run_once(token: str, chat_id: str, lookback_hours: int) -> None:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    # We run as PID 1 in the container: the kernel ignores SIGTERM for PID 1 unless a handler is set,
+    # so without this Kubernetes waits 30 s and then SIGKILLs us on every restart/deploy.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
     interval = int(os.environ.get("INTERVAL_MINUTES", "60"))
