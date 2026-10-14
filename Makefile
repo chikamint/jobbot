@@ -94,7 +94,13 @@ prod-logs:        ## follow jobbot logs in production
 .PHONY: prod-flux prod-sync prod-flux-status
 
 prod-flux:        ## install/upgrade Flux (2 controllers) and the jobbot sync config
-	KUBECONFIG=$(PROD_KUBECONFIG) kubectl apply --server-side --force-conflicts -k deploy/flux
+	@# CRDs and objects of those kinds come in one apply: the first pass creates the CRDs,
+	@# the API server needs a moment to register them, the second pass creates GitRepository/Kustomization
+	export KUBECONFIG=$(PROD_KUBECONFIG); \
+	kubectl apply --server-side --force-conflicts -k deploy/flux >/dev/null 2>&1; \
+	kubectl wait --for=condition=Established --timeout=60s \
+		crd/gitrepositories.source.toolkit.fluxcd.io crd/kustomizations.kustomize.toolkit.fluxcd.io && \
+	kubectl apply --server-side --force-conflicts -k deploy/flux
 
 prod-sync:        ## don't wait for the 1-minute poll: fetch git and apply now
 	export KUBECONFIG=$(PROD_KUBECONFIG); t=$$(date +%s); \

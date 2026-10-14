@@ -14,6 +14,29 @@ kubeEtcd:
 kubeProxy:
   enabled: false
 
+# Cardinality: 104k series in Prometheus, 73k of them API server / etcd histograms, while jobbot has 29.
+# k3s runs apiserver + kubelet in one process, so those metrics come twice (apiserver AND kubelet endpoint).
+# Prometheus memory grows with the number of series: stop scraping them.
+kubeApiServer:
+  enabled: false
+kubelet:
+  serviceMonitor:
+    metricRelabelings:
+      - action: drop               # control-plane metrics leaking through the k3s kubelet endpoint
+        sourceLabels: [__name__]
+        regex: (apiserver|etcd|kine|watch_cache|apiextensions|aggregator|authentication|authenticated|authorization|workqueue|rest_client|kubernetes_feature|registered_metrics|scheduler)_.*
+      - action: drop               # chart default: high-cardinality storage buckets
+        sourceLabels: [__name__, le]
+        regex: (csi_operations|storage_operation_duration)_seconds_bucket;(0.25|2.5|15|25|120|600)(\.0)?
+
+defaultRules:
+  rules:                           # their source metrics are not scraped any more (see above)
+    etcd: false
+    kubeApiserverAvailability: false
+    kubeApiserverBurnrate: false
+    kubeApiserverHistogram: false
+    kubeApiserverSlos: false
+
 prometheus:
   prometheusSpec:
     scrapeInterval: 60s          # default 30s; a hourly job needs no more, halves memory and disk
