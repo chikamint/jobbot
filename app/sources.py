@@ -4,7 +4,6 @@ Only official APIs, RSS feeds and pages allowed by robots.txt are used.
 Sources that require attribution are credited in the Telegram message (SOURCE_NAMES)."""
 import html
 import json
-import os
 import re
 import time
 import urllib.parse
@@ -26,31 +25,35 @@ class Job:
 
 
 SOURCE_NAMES = {
-    "himalayas": "Himalayas", "greenhouse": "Greenhouse", "ashby": "Ashby", "lever": "Lever",
+    "himalayas": "Himalayas", "greenhouse": "Greenhouse", "ashby": "Ashby", "lever": "Lever", "smartrecruiters": "SmartRecruiters",
     "remoteok": "Remote OK", "remotive": "Remotive", "jobicy": "Jobicy", "wwr": "We Work Remotely",
-    "habr": "Хабр Карьера", "hh": "hh.ru", "jobsge": "jobs.ge", "telegram": "Telegram",
+    "habr": "Хабр Карьера", "jobsge": "jobs.ge", "telegram": "Telegram",
 }
 
 # What to query. Edit these lists to tune the channel.
 BOARDS = (
     [("himalayas", q) for q in ["devops", "linux", "sre", "system administrator", "support engineer", "noc"]]
-    + [("greenhouse", c) for c in ["canonical", "gitlab", "nebius", "wheely", "jetbrains"]]
-    + [("ashby", c) for c in ["constructor", "GR8-TECH"]]
-    + [("lever", c) for c in ["xsolla"]]
+    + [("greenhouse", c) for c in ["canonical", "gitlab", "nebius", "wheely", "jetbrains", "appodeal", "bitpanda",
+                                  "bybit", "flohealth", "okx", "orioninnovation", "soft2bet", "sportygroup",
+                                  "wrike", "fxpro"]]
+    + [("ashby", c) for c in ["constructor", "GR8-TECH", "dodo", "ledger", "miro", "moonactive"]]
+    + [("lever", c) for c in ["xsolla", "1inch"]]
+    + [("smartrecruiters", c) for c in ["gcore", "sportradar", "evolution", "joom", "improvado", "bgaming",
+                                        "playwing"]]
     + [("remoteok", t) for t in ["devops", "sysadmin"]]
     + [("remotive", "devops")]
     + [("jobicy", t) for t in ["devops", "linux", "sre"]]
     + [("wwr", "remote-devops-sysadmin-jobs")]
     + [("habr", q) for q in ["devops", "linux", "sre", "системный администратор"]]
-    + [("hh", q) for q in ["devops", "linux", "sre", "системный администратор"]]
     + [("jobsge", q) for q in ["devops", "linux", "system administrator", "sre"]]
     + [("telegram", ch) for ch in ["devops_jobs_feed", "Job_DevOps", "sysadmin_jobs", "remote_it_jobs",
-                                   "opento_igaming", "iGaming_work", "iGamingoffice"]]
+                                   "opento_igaming", "iGaming_work", "iGamingoffice", "jobbytokhastik",
+                                   "cryptojobslist", "betting_jobs"]]
 )
 
 # Sources whose results are already limited to Georgia / remote-from-anywhere / RU-speaking market.
 # Global boards are additionally filtered by location in jobbot.collect().
-GEO_PREFILTERED = {"himalayas", "hh", "habr", "jobsge", "telegram"}
+GEO_PREFILTERED = {"himalayas", "habr", "jobsge", "telegram"}
 
 UA = "jobbot/1.0 (+https://github.com/chikamint/jobbot)"
 MONTHS = {m: i for i, m in enumerate(["january", "february", "march", "april", "may", "june", "july", "august",
@@ -108,6 +111,19 @@ def lever(company):
                   datetime.fromtimestamp(j["createdAt"] / 1000, timezone.utc))
 
 
+# SmartRecruiters gives ISO country codes; spell out the ones reachable from Georgia so jobbot.LOCATION matches.
+COUNTRIES = {"ge": "Georgia", "am": "Armenia", "cy": "Cyprus", "rs": "Serbia", "kz": "Kazakhstan"}
+
+
+def smartrecruiters(company):
+    # shortcut: first 100 postings only; paginate with offset= if a board grows past that
+    for j in fetch_json(f"https://api.smartrecruiters.com/v1/companies/{company}/postings?limit=100")["content"]:
+        loc = j.get("location") or {}
+        country = COUNTRIES.get(loc.get("country", ""), loc.get("country", ""))
+        yield Job("smartrecruiters", j["company"]["name"], j["name"], f"{loc.get('city', '')}, {country}",
+                  f"https://jobs.smartrecruiters.com/{company}/{j['id']}", iso(j["releasedDate"]))
+
+
 def remoteok(tag):
     for j in fetch_json(f"https://remoteok.com/api?tag={q(tag)}")[1:]:  # [0] is the legal notice
         # ToS: link to the Remote OK page (url), not directly to apply_url
@@ -143,21 +159,6 @@ def habr(query):
         title = re.sub(r"^Требуется «(.*?)»", r"\1", item.findtext("title") or "")
         yield Job("habr", item.findtext("author") or "", title, "Удалённо", item.findtext("link"),
                   parsedate_to_datetime(item.findtext("pubDate")))
-
-
-# --- hh.ru: official API, needs an application token from dev.hh.ru ---
-
-def hh(query):
-    token = os.environ.get("HH_TOKEN", "")
-    if not token:
-        return  # source disabled until the token is configured
-    params = urllib.parse.urlencode({"text": query, "search_field": "name", "work_format": "REMOTE",
-                                     "period": 2, "per_page": 50, "order_by": "publication_time"})
-    data = fetch_json(f"https://api.hh.ru/vacancies?{params}",
-                      {"Authorization": f"Bearer {token}", "HH-User-Agent": UA})
-    for j in data["items"]:
-        yield Job("hh", (j.get("employer") or {}).get("name") or "", j["name"], "Удалённо",
-                  j["alternate_url"], iso(j["published_at"]))
 
 
 # --- HTML pages (allowed by robots.txt) ---
@@ -199,6 +200,6 @@ def telegram(channel):
         yield Job("telegram", f"@{channel}", body[:150], "", f"https://t.me/{post_id.group(1)}", iso(date.group(1)))
 
 
-FETCHERS = {"himalayas": himalayas, "greenhouse": greenhouse, "ashby": ashby, "lever": lever,
+FETCHERS = {"himalayas": himalayas, "greenhouse": greenhouse, "ashby": ashby, "lever": lever, "smartrecruiters": smartrecruiters,
             "remoteok": remoteok, "remotive": remotive, "jobicy": jobicy, "wwr": wwr,
-            "habr": habr, "hh": hh, "jobsge": jobsge, "telegram": telegram}
+            "habr": habr, "jobsge": jobsge, "telegram": telegram}

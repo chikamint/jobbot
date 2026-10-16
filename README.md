@@ -14,7 +14,6 @@ Sources (official APIs, RSS feeds, pages allowed by robots.txt; credited in ever
 | Remote OK, Remotive, Jobicy | JSON APIs | global remote boards, location-filtered |
 | We Work Remotely | RSS | DevOps & SysAdmin category |
 | Habr Career | RSS | remote vacancies |
-| hh.ru | official API, application token | remote vacancies |
 | jobs.ge | HTML (robots.txt allows, 5 s delay) | local Georgian vacancies |
 | Telegram channels | public web preview | excerpt + link to the original post |
 
@@ -60,7 +59,6 @@ make help       # all targets
 |---|---|---|
 | `PGHOST`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | — | PostgreSQL connection (standard libpq variables) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | empty | without them the bot runs in dry-run mode |
-| `HH_TOKEN` | empty | hh.ru application token; without it the hh.ru source is skipped |
 | `INTERVAL_MINUTES` | 60 | pause between runs |
 | `LOOKBACK_HOURS` | 48 | ignore vacancies older than this |
 | `METRICS_PORT` | 8000 | Prometheus metrics endpoint |

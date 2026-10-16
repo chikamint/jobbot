@@ -11,15 +11,6 @@
    kubectl -n jobbot rollout restart deploy/jobbot
    ```
 
-## Enable hh.ru
-
-hh.ru API rejects anonymous requests (403). Register an application at https://dev.hh.ru
-(needs an hh.ru account; the app goes through moderation), get the **application token**, then:
-```bash
-kubectl -n jobbot create secret generic hh --from-literal=token=<APP_TOKEN>
-kubectl -n jobbot rollout restart deploy/jobbot
-```
-
 ## Add or remove a source
 
 All boards are listed in `BOARDS` at the top of `app/sources.py`.

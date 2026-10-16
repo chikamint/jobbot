@@ -20,6 +20,16 @@ def test_suitable_roles():
     assert not jobbot.suitable("Backend Developer")
     assert not jobbot.suitable("Software Engineer - Data Infrastructure")
     assert not jobbot.suitable("Системный администратор Windows")
+    # real noise from the live run on 2026-10-17
+    assert not jobbot.suitable("Системный аналитик по разработке средств защиты информации")
+    assert not jobbot.suitable("Продуктовый аналитик (ОС Astra Linux)")
+    assert not jobbot.suitable("Администратор проектов (ДВиС)")
+    assert not jobbot.suitable("Администратор баз данных")
+    assert not jobbot.suitable("Специалист по анализу безопасности (ОС Astra Linux)")
+    assert not jobbot.suitable("DevOps Volunteer")
+    # and what must still pass
+    assert jobbot.suitable("Дежурный Linux-инженер")
+    assert jobbot.suitable("Системный администратор (Астра Облако)")
 
 
 def test_location_filter_only_for_global_boards():
@@ -64,11 +74,21 @@ def test_telegram_skips_resumes(monkeypatch):
     assert jobs[0].title == "DevOps Engineer remote"
 
 
-def test_hh_disabled_without_token(monkeypatch):
-    monkeypatch.delenv("HH_TOKEN", raising=False)
-    assert list(sources.hh("devops")) == []
-
-
 def test_message_credits_source():
     msg = jobbot.format_message("remoteok", "Acme", "DevOps Engineer", "Worldwide", "https://remoteok.com/x")
     assert msg.endswith("via Remote OK")
+
+
+def test_smartrecruiters(monkeypatch):
+    data = {"content": [{"id": "744000156025390", "name": "DevOps Engineer/SRE (Cloud IaaS)",
+                         "releasedDate": "2026-10-16T09:00:00.000Z", "company": {"name": "Gcore"},
+                         "location": {"city": "Tbilisi", "country": "ge", "remote": True}}]}
+    monkeypatch.setattr(sources, "fetch_json", lambda url, headers=None: data)
+    [job] = sources.smartrecruiters("gcore")
+    assert job.url == "https://jobs.smartrecruiters.com/gcore/744000156025390"
+    assert (job.company, job.title) == ("Gcore", "DevOps Engineer/SRE (Cloud IaaS)")
+    assert jobbot.relevant(job, SINCE)  # Georgia must pass the location filter
+
+
+def test_every_board_has_a_fetcher():
+    assert {source for source, _ in sources.BOARDS} <= set(sources.FETCHERS)

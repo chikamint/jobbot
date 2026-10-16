@@ -48,12 +48,6 @@ spec:
                   name: telegram
                   key: chat_id
                   optional: true
-            - name: HH_TOKEN                 # optional: hh.ru source is skipped without it
-              valueFrom:
-                secretKeyRef:
-                  name: hh
-                  key: token
-                  optional: true
           resources:
             requests:
               cpu: 20m

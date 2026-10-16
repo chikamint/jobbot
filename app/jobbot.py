@@ -24,7 +24,7 @@ ROLE = re.compile(r"linux|devops|девопс|\bsre\b|reliab|system admin|sysadm
 BAD = re.compile(r"senior|\bsr\.|head|director|manager|principal|staff|architect|\blead\b|developer|"
                  r"software engineer|quality assurance|\bqa\b|sales|account|recruit|marketing|data eng|"
                  r"machine learning|distinguished|\bcto\b|field|старш|ведущ|руководител|тимлид|"
-                 r"разработчик|1с|1c|windows", re.I)
+                 r"разработчик|1с|1c|windows|аналитик|analyst|проектов|баз данных|\bdba\b|безопасност|volunteer", re.I)
 # global boards: keep locations reachable from Georgia
 LOCATION = re.compile(r"worldwide|anywhere|global|emea|europe|georgia|tbilisi|armenia|yerevan|cyprus|"
                       r"serbia|belgrade|kazakhstan|almaty|^remote$", re.I)
